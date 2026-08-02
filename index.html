@@ -493,7 +493,7 @@ function renderNico(){
 
   ${STATE.loadNinosError ? `<div class="error-msg" style="margin-bottom:16px;">No se pudieron cargar todos los niños: ${esc(STATE.loadNinosError)}</div>` : ''}
   ${STATE.ninos.length === 0 && !STATE.loadNinosError ? `<div class="empty-state">Todavía no agregaste ningún niño.</div>` : ''}
-  ${STATE.ninos.map(n => {
+  ${STATE.ninos.map(n=\>
     const deEste = STATE.tareas.filter(t => t.nino_id === n.id);
     const porRevisar = deEste.filter(t => t.estado === 'respondida').length;
     return `
