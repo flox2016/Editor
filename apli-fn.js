@@ -107,6 +107,10 @@ export default async ({ req, res }) => {
 
   try {
     switch(action) {
+      // ───── administración APLI COP ─────
+      case 'admin_login': return await adminLogin(body);
+      case 'admin_data':  return await adminData(body);
+
       // ───── app-auth ─────
       case 'register':    return await authRegister(body);
       case 'login':       return await authLogin(body);
@@ -145,6 +149,50 @@ export default async ({ req, res }) => {
   }
 };
 
+// ═══════════════════════════════════════════════
+//  ADMINISTRACIÓN (protegida desde el servidor)
+// ═══════════════════════════════════════════════
+async function adminLogin({ pin='' }) {
+  const configured = Deno.env.get('ADMIN_PIN_HASH') || '';
+  if (!configured) return json({ ok:false, error:'Falta configurar ADMIN_PIN_HASH en Appwrite > Functions > Variables' }, 503);
+  const supplied = await sha256hex('aplicop-pin:' + String(pin));
+  if (supplied !== configured.toLowerCase()) return json({ ok:false, error:'PIN incorrecto' }, 401);
+  const token = await sign({ admin:true, exp: Math.floor(Date.now()/1000) + 8*60*60 });
+  return json({ ok:true, token, expires_in:8*60*60 });
+}
+
+const ADMIN_COLLECTIONS = new Set([
+  T.usuarios, T.pedidos, T.presencia, T.conversaciones, T.actualizaciones,
+  T.config_bot, T.perfiles, T.grupos, T.solicitudes, T.alertas_bot, T.subidos
+]);
+
+async function adminData({ token='', operation='list', collection='', document_id='', data={}, limit=100 }) {
+  const session = await verify(token);
+  if (!session || session.admin !== true) return json({ ok:false, error:'No autorizado' }, 401);
+  if (!ADMIN_COLLECTIONS.has(collection)) return json({ ok:false, error:'Colección no permitida' }, 400);
+  const db = mkDB();
+  if (operation === 'list') {
+    const n = Math.max(1, Math.min(100, Number(limit) || 100));
+    const result = await db.listDocuments(DB_ID, collection, [Query.limit(n)]);
+    return json({ ok:true, documents:result.documents, total:result.total });
+  }
+  if (operation === 'create') {
+    const doc = await db.createDocument(DB_ID, collection, ID.unique(), data || {});
+    return json({ ok:true, document:doc });
+  }
+  if (!document_id) return json({ ok:false, error:'Falta document_id' }, 400);
+  if (operation === 'update') {
+    const doc = await db.updateDocument(DB_ID, collection, document_id, data || {});
+    return json({ ok:true, document:doc });
+  }
+  if (operation === 'delete') {
+    await db.deleteDocument(DB_ID, collection, document_id);
+    return json({ ok:true });
+  }
+  return json({ ok:false, error:'Operación no válida' }, 400);
+}
+
+// ═══════════════════════════════════════════════
 // ═══════════════════════════════════════════════
 //  AUTH
 // ═══════════════════════════════════════════════
